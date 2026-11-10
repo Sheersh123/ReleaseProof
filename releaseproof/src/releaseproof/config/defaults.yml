@@ -1,0 +1,71 @@
+# ReleaseProof default policy (Stage 1 MVP).
+#
+# Maps rule outcomes to decisions. The policy is deterministic and versioned.
+# A pull request must not be able to weaken the policy used to assess itself
+# without review — evaluate against the protected base-branch copy of this file.
+#
+# Decision precedence (highest first): incomplete > block > warn > pass.
+# "Analysis Incomplete" can never silently become "Pass".
+
+version: 1
+
+policies:
+  terraform:
+    # Rule-id -> action. Action is one of: block | warn | pass | ignore
+    TF-DESTROY-PROD: block            # delete/replace of a production-tagged resource
+    TF-REPLACE-STATEFUL: warn         # replacement of a stateful resource (db, disk, bucket)
+    TF-DELETE-STATEFUL: block         # outright delete of a stateful resource
+    TF-DELETE-GENERIC: warn           # delete of any other resource
+    TF-IAM-BROADEN: warn              # IAM / security-group widening
+    TF-UNSUPPORTED-FORMAT: incomplete # plan format/version not supported
+
+  postgres:
+    # Squawk + built-in rule ids -> action.
+    PG-DROP-COLUMN: block
+    PG-DROP-TABLE: block
+    PG-RENAME-COLUMN: block
+    PG-RENAME-TABLE: block
+    PG-NOT-NULL-NO-DEFAULT: block
+    PG-ADD-COLUMN-DEFAULT-VOLATILE: warn
+    PG-CHANGE-COLUMN-TYPE: warn
+    PG-ADD-INDEX-NON-CONCURRENT: warn
+    PG-TRUNCATE: block
+    # Squawk native rules map onto severity-based handling below unless named here.
+
+  # How to treat Squawk-native findings that have no explicit rule mapping above.
+  # Keyed by normalised severity.
+  severity_defaults:
+    critical: block
+    high: block
+    medium: warn
+    low: warn
+    info: pass
+
+  analysis:
+    missing_terraform_plan: incomplete
+    missing_migrations: pass          # no migrations changed is a valid "nothing to check"
+    analyzer_error: incomplete
+    unsupported_plan_format: incomplete
+
+# Optional: resource types treated as "stateful" for the stateful rules above.
+# Matched as substrings against the terraform resource type.
+stateful_resource_types:
+  - db_instance
+  - rds
+  - database
+  - sql
+  - disk
+  - volume
+  - bucket
+  - s3_bucket
+  - efs
+  - elasticache
+  - dynamodb_table
+  - persistent
+
+# Optional: how a resource is recognised as "production".
+# Matched case-insensitively against resource address, name, and tag values.
+production_markers:
+  - prod
+  - production
+  - prd

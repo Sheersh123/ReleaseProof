@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "releaseproof"
+version = "0.1.0"
+description = "CI-native pre-release safety assessment for Terraform plans and PostgreSQL migrations."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "Sheersh Sinha" }]
+keywords = ["terraform", "postgresql", "migrations", "ci", "release-safety", "policy"]
+
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+]
+# Layer B runtime validation needs a PostgreSQL driver.
+runtime = [
+    "psycopg2-binary>=2.9",
+]
+
+[project.scripts]
+releaseproof = "releaseproof.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+releaseproof = ["config/*.yml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"

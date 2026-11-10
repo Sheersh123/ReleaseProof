@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+plan.json
+tfplan.binary
+releaseproof.json
+changed_files.txt
+.venv/

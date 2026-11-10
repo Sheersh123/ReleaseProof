@@ -1,0 +1,105 @@
+name: ReleaseProof
+
+# PR-safe by design (doc section 8):
+# - Uses `pull_request` (NOT pull_request_target) so untrusted PR code never runs
+#   with privileged, write-scoped credentials.
+# - Minimal GITHUB_TOKEN permissions.
+# - ReleaseProof never needs production credentials.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write   # only to post the summary/comment if you add one later
+
+jobs:
+  releaseproof:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need history to compute the changed-file set
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ReleaseProof
+        run: pip install .
+
+      # Install the pinned Squawk linter (optional — built-in rules run regardless).
+      - name: Install Squawk
+        run: pip install squawk-cli || echo "Squawk install skipped; built-in rules will run."
+
+      # The customer's existing Terraform plan step produces plan.json.
+      # Replace this block with your real plan generation, or remove it if you
+      # only want migration analysis. We keep the raw plan out of logs.
+      - name: Terraform plan (JSON)
+        id: tfplan
+        run: |
+          if [ -f main.tf ] || ls ./**/*.tf >/dev/null 2>&1; then
+            curl -fsSL https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip -o tf.zip
+            unzip -q tf.zip && sudo mv terraform /usr/local/bin/
+            terraform init -input=false -no-color || true
+            # NOTE: configure your backend/vars; this is a template step.
+            terraform plan -input=false -no-color -out=tfplan.binary || true
+            terraform show -json tfplan.binary > plan.json 2>/dev/null || true
+          fi
+          # Never print plan.json — it can contain sensitive values.
+          if [ -f plan.json ]; then echo "has_plan=true" >> "$GITHUB_OUTPUT"; else echo "has_plan=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Compute changed migration files
+        id: changed
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          git diff --name-only "$BASE" "$HEAD" > changed_files.txt || true
+          echo "Changed files:"; cat changed_files.txt
+
+      - name: Run ReleaseProof
+        id: rp
+        run: |
+          ARGS="--migrations-from changed_files.txt --migrations-dir migrations --json-out releaseproof.json"
+          if [ "${{ steps.tfplan.outputs.has_plan }}" = "true" ]; then
+            ARGS="--plan plan.json $ARGS"
+          fi
+          # Runtime validation (Layer B) is opt-in. To enable it: uncomment the
+          # services: postgres block below, add a migrations/baseline.sql, and
+          # set RELEASEPROOF_TEST_DSN in the job env. Then:
+          # ARGS="$ARGS --runtime-validate --baseline migrations/baseline.sql"
+          set +e
+          releaseproof $ARGS
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Upload JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: releaseproof-report
+          path: releaseproof.json
+          if-no-files-found: ignore
+
+      - name: Enforce decision
+        if: always()
+        run: |
+          CODE="${{ steps.rp.outputs.exit_code }}"
+          echo "ReleaseProof exit code: $CODE"
+          # 0 = pass/warning (non-blocking), 1 = block, 2 = analysis incomplete.
+          # Both 1 and 2 fail the check — an incomplete analysis is never a pass.
+          exit "$CODE"
+
+    # Optional runtime-validation service (Layer B). Uncomment to enable:
+    # services:
+    #   postgres:
+    #     image: postgres:16
+    #     env:
+    #       POSTGRES_PASSWORD: postgres
+    #     ports: ["5432:5432"]
+    #     options: >-
+    #       --health-cmd pg_isready --health-interval 10s
+    #       --health-timeout 5s --health-retries 5

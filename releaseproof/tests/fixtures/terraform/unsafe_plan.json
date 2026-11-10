@@ -1,0 +1,60 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.7.5",
+  "resource_changes": [
+    {
+      "address": "aws_db_instance.prod_primary",
+      "type": "aws_db_instance",
+      "name": "prod_primary",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": { "tags": { "env": "production" } },
+        "after": { "tags": { "env": "production" } },
+        "replace_paths": [["engine_version"]]
+      }
+    },
+    {
+      "address": "aws_db_instance.staging_cache",
+      "type": "aws_db_instance",
+      "name": "staging_cache",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": { "tags": { "env": "staging" } },
+        "after": { "tags": { "env": "staging" } },
+        "replace_paths": [["instance_class"]]
+      }
+    },
+    {
+      "address": "aws_ebs_volume.scratch",
+      "type": "aws_ebs_volume",
+      "name": "scratch",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": { "tags": { "env": "dev" } }
+      }
+    },
+    {
+      "address": "aws_iam_policy.app",
+      "type": "aws_iam_policy",
+      "name": "app",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "after": { "tags": { "env": "staging" } }
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.old",
+      "type": "aws_cloudwatch_log_group",
+      "name": "old",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": { "tags": { "env": "dev" } }
+      }
+    }
+  ]
+}
